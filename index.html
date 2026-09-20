@@ -8,42 +8,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Tajawal Font for Premium Arabic UI -->
+    <!-- Google Tajawal Font -->
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     
-    <!-- Firebase Cloud SDKs for Real-time Cross-Device Sync -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pharm-attendance-app';
-        
-        // Firebase Config (Supports environment or fallback standalone config)
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyDemoKeyForPharmacyAttendanceSystem2026",
-            authDomain: "pharmacy-attendance.firebaseapp.com",
-            projectId: "pharmacy-attendance",
-            storageBucket: "pharmacy-attendance.appspot.com",
-            messagingSenderId: "1234567890",
-            appId: "1:1234567890:web:abcdef123456"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        window.db = db;
-        window.appId = appId;
-        window.auth = auth;
-        window.signInAnonymously = signInAnonymously;
-        window.signInWithCustomToken = signInWithCustomToken;
-        window.doc = doc;
-        window.setDoc = setDoc;
-        window.onSnapshot = onSnapshot;
-        window.collection = collection;
-        window.addDoc = addDoc;
-    </script>
+    <!-- MQTT Real-time Cloud Messaging SDK for Instant Cross-Device Sync -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
     <style>
         body {
@@ -84,6 +53,12 @@
         </div>
     </header>
 
+    <!-- Cloud Sync Status Toast -->
+    <div id="cloudStatusBadge" class="fixed top-20 right-4 z-40 bg-slate-800/80 backdrop-blur-md text-white text-[11px] px-3 py-1.5 rounded-full shadow-lg flex items-center space-x-2 space-x-reverse">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+        <span id="cloudStatusText">جاري الاتصال بالسحابة...</span>
+    </div>
+
     <!-- Notification Toast Container -->
     <div id="toastContainer" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-md pointer-events-none"></div>
 
@@ -114,9 +89,9 @@
             <!-- Active Session Status Banner -->
             <div id="sessionStatusCard" class="glass-card rounded-2xl p-5 shadow-sm border-r-4 border-r-amber-500 flex items-center justify-between">
                 <div class="flex items-center space-x-3 space-x-reverse">
-                    <div class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></div>
+                    <div id="sessionStatusDot" class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></div>
                     <div>
-                        <h2 class="font-bold text-sm text-slate-700">جاري التحقق من الجلسة النشطة عبر السحابة...</h2>
+                        <h2 id="sessionTitleText" class="font-bold text-sm text-slate-700">جاري الاستعلام عن الجلسة من السحابة...</h2>
                         <p class="text-xs text-slate-500">مربوط بالسحابة مباشرة مع هاتف المعيد بالمعمل</p>
                     </div>
                 </div>
@@ -177,7 +152,7 @@
                             <input type="text" id="studentPin" maxlength="4" required placeholder="أدخل الرمز المكون من 4 أرقام" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono text-center tracking-widest text-lg font-bold focus:ring-2 focus:ring-teal-500 focus:outline-none transition">
                             <i class="fa-solid fa-key absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                         </div>
-                        <p class="text-[11px] text-slate-400 mt-1">الرمز يظهر على شاشة العرض بالمعمل ويتم تغييره دورياً لمنع التزوير.</p>
+                        <p class="text-[11px] text-slate-400 mt-1">الرمز يظهر على شاشة العرض بالمعمل ويتم تغييره دورياً لمنع الغش.</p>
                     </div>
 
                     <!-- Location Verification Step -->
@@ -276,7 +251,7 @@
                 <div id="adminActiveSessionPanel" class="bg-gradient-to-br from-slate-900 to-teal-950 text-white rounded-2xl p-6 shadow-inner hidden space-y-4">
                     <div class="flex flex-col md:flex-row justify-between items-center gap-6">
                         <div class="space-y-2 text-center md:text-right">
-                            <span class="inline-block bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs px-3 py-1 rounded-full font-bold">جلسة نشطة حالياً</span>
+                            <span class="inline-block bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs px-3 py-1 rounded-full font-bold">جلسة نشطة حالياً بالسحابة</span>
                             <h3 id="activeSessionTitle" class="text-lg font-bold">Pharmaceutics III - سكشن 1</h3>
                             <p id="activeSessionCoords" class="text-xs text-slate-400 font-mono">حالة الموقع: مفعل</p>
                         </div>
@@ -315,7 +290,6 @@
                         <i class="fa-solid fa-list-check text-teal-600 ml-2"></i>سجل الحضور المباشر
                         <span id="recordCountBadge" class="mr-2 bg-teal-100 text-teal-800 text-xs px-2 py-0.5 rounded-full font-bold">0 طالب</span>
                     </h3>
-                    <!-- Filter -->
                     <div class="w-full sm:w-auto flex gap-2">
                         <input type="text" id="tableSearch" onkeyup="filterTable()" placeholder="بحث باسم الطالب أو ID..." class="w-full sm:w-64 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500">
                     </div>
@@ -347,70 +321,93 @@
 
     <!-- App Logic Script -->
     <script>
-        const SESSION_KEY = 'pharm_active_session_data';
-        const RECORDS_KEY = 'pharm_attendance_records_list';
+        const SESSION_KEY = 'pharm_active_session_data_v2';
+        const RECORDS_KEY = 'pharm_attendance_records_list_v2';
         const PWD_KEY = 'pharm_admin_pwd';
-        const channel = new BroadcastChannel('pharm_attendance_channel');
+
+        if (!localStorage.getItem(PWD_KEY)) {
+            localStorage.setItem(PWD_KEY, '1234');
+        }
 
         let studentCoords = null;
-        let activeSessionData = JSON.parse(localStorage.getItem(SESSION_KEY)) || null;
+        let activeSessionData = JSON.parse(localStorage.getItem(SESSION_KEY)) || { isActive: false };
         let allAttendanceRecords = JSON.parse(localStorage.getItem(RECORDS_KEY)) || [];
         let isAdminAuthenticated = false;
-        let isCloudConnected = false;
 
-        // Initialize Cloud Real-time Listeners
-        window.addEventListener('load', async () => {
+        // MQTT Real-time Cloud Broker Config
+        const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+        const TOPIC_SESSION = 'pharmacy_sec_2026_sharaf/session';
+        const TOPIC_RECORDS = 'pharmacy_sec_2026_sharaf/records';
+
+        let mqttClient = null;
+
+        window.addEventListener('load', () => {
             updateStudentBanner();
             updateAdminPanel();
             renderAttendanceTable();
+            connectToCloudBroker();
+        });
 
-            // Connect to Cloud Firestore Realtime Sync
-            let attempts = 0;
-            const initCloudSync = setInterval(async () => {
-                attempts++;
-                if (window.db && window.auth) {
-                    clearInterval(initCloudSync);
+        function connectToCloudBroker() {
+            const statusText = document.getElementById('cloudStatusText');
+            const statusBadge = document.getElementById('cloudStatusBadge');
+
+            try {
+                mqttClient = mqtt.connect(MQTT_BROKER);
+
+                mqttClient.on('connect', () => {
+                    statusText.innerText = "متصل بالسحابة (مباشر)";
+                    statusBadge.className = "fixed top-20 right-4 z-40 bg-emerald-800/90 backdrop-blur-md text-white text-[11px] px-3 py-1.5 rounded-full shadow-lg flex items-center space-x-2 space-x-reverse";
+                    
+                    mqttClient.subscribe(TOPIC_SESSION);
+                    mqttClient.subscribe(TOPIC_RECORDS);
+                });
+
+                mqttClient.on('message', (topic, message) => {
                     try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await window.signInWithCustomToken(window.auth, __initial_auth_token);
-                        } else {
-                            await window.signInAnonymously(window.auth);
-                        }
-
-                        isCloudConnected = true;
-
-                        // 1. Listen to Session updates live across ALL devices
-                        const sessionDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'session', 'current');
-                        window.onSnapshot(sessionDocRef, (docSnap) => {
-                            if (docSnap.exists()) {
-                                activeSessionData = docSnap.data();
-                                localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-                                updateStudentBanner();
-                                updateAdminPanel();
-                            }
-                        }, (err) => console.warn('Cloud Session sync warning:', err));
-
-                        // 2. Listen to Attendance records live across ALL devices
-                        const attendanceCollRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'attendance');
-                        window.onSnapshot(attendanceCollRef, (querySnap) => {
-                            const cloudRecords = [];
-                            querySnap.forEach((d) => cloudRecords.push(d.data()));
-                            if (cloudRecords.length > 0) {
-                                allAttendanceRecords = cloudRecords;
+                        const data = JSON.parse(message.toString());
+                        if (topic === TOPIC_SESSION) {
+                            activeSessionData = data;
+                            localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
+                            updateStudentBanner();
+                            updateAdminPanel();
+                        } else if (topic === TOPIC_RECORDS) {
+                            const exists = allAttendanceRecords.some(r => 
+                                r.studentId === data.studentId && r.course === data.course && r.sectionNum === data.sectionNum
+                            );
+                            if (!exists) {
+                                allAttendanceRecords.push(data);
                                 localStorage.setItem(RECORDS_KEY, JSON.stringify(allAttendanceRecords));
                                 renderAttendanceTable();
                             }
-                        }, (err) => console.warn('Cloud Attendance sync warning:', err));
-
-                    } catch (err) {
-                        console.warn('Cloud database running in local fallback mode:', err);
+                        }
+                    } catch (e) {
+                        console.error('MQTT Sync parsing error', e);
                     }
-                }
-                if (attempts > 20) clearInterval(initCloudSync);
-            }, 300);
-        });
+                });
 
-        window.startSession = async function() {
+                mqttClient.on('error', () => {
+                    statusText.innerText = "خطأ في اتصال السحابة";
+                    statusBadge.className = "fixed top-20 right-4 z-40 bg-rose-800/90 text-white text-[11px] px-3 py-1.5 rounded-full shadow-lg flex items-center space-x-2 space-x-reverse";
+                });
+            } catch (err) {
+                console.warn('MQTT Connection fallback:', err);
+            }
+        }
+
+        function publishSessionToCloud(data) {
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(TOPIC_SESSION, JSON.stringify(data), { retain: true, qos: 1 });
+            }
+        }
+
+        function publishRecordToCloud(record) {
+            if (mqttClient && mqttClient.connected) {
+                mqttClient.publish(TOPIC_RECORDS, JSON.stringify(record), { qos: 1 });
+            }
+        }
+
+        window.startSession = function() {
             const course = document.getElementById('adminCourse').value;
             const sectionNum = document.getElementById('adminSectionNum').value;
             const requireGps = document.getElementById('requireGpsToggle').checked;
@@ -418,7 +415,7 @@
 
             const pin = Math.floor(1000 + Math.random() * 9000).toString();
 
-            const saveAndPublishSession = async (lat = null, lng = null) => {
+            const saveAndPublishSession = (lat = null, lng = null) => {
                 activeSessionData = {
                     course: course,
                     sectionNum: sectionNum,
@@ -433,23 +430,12 @@
                     startTime: new Date().toISOString()
                 };
 
-                // Local Storage & Channel update
                 localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-                channel.postMessage({ type: 'SESSION_UPDATE', session: activeSessionData });
-
-                // Cloud Push to sync ALL student phones immediately
-                if (window.db) {
-                    try {
-                        const sessionDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'session', 'current');
-                        await window.setDoc(sessionDocRef, activeSessionData);
-                    } catch (e) {
-                        console.warn('Failed cloud push, stored locally:', e);
-                    }
-                }
+                publishSessionToCloud(activeSessionData);
 
                 updateStudentBanner();
                 updateAdminPanel();
-                showToast(`تم فتح الجلسة وبثها لجميع الهواتف! الرمز المباشر: ${pin}`, 'success');
+                showToast(`تم فتح الجلسة بنجاح وبثها لجميع هواتف الطلاب! الرمز المباشر: ${pin}`, 'success');
             };
 
             if (requireGps && navigator.geolocation) {
@@ -457,7 +443,7 @@
                 navigator.geolocation.getCurrentPosition(
                     (pos) => saveAndPublishSession(pos.coords.latitude, pos.coords.longitude),
                     (err) => {
-                        showToast('تعذر جلب موقع المعمل بدقة، تم فتح الجلسة وتأمينها بالرمز الفعّال!', 'info');
+                        showToast('تعذر جلب موقع المعمل بدقة، تم فتح الجلسة وتأمينها بالرمز المباشر!', 'info');
                         saveAndPublishSession();
                     },
                     { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
@@ -467,7 +453,59 @@
             }
         };
 
-        window.handleStudentSubmit = async function(e) {
+        window.addSecondLabLocation = function() {
+            if (!activeSessionData || !activeSessionData.isActive) {
+                showToast('افتتح الجلسة أولاً قبل إضافة موقع المعمل الثاني', 'error');
+                return;
+            }
+
+            if (!navigator.geolocation) {
+                showToast('المتصفح لا يدعم تحديد الموقع', 'error');
+                return;
+            }
+
+            showToast('جاري التقاط موقع المعمل الثاني...', 'info');
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    activeSessionData.lat2 = pos.coords.latitude;
+                    activeSessionData.lng2 = pos.coords.longitude;
+
+                    localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
+                    publishSessionToCloud(activeSessionData);
+
+                    updateAdminPanel();
+                    showToast('تم تسجيل وتفعيل موقع المعمل الثاني بنجاح!', 'success');
+                },
+                (err) => {
+                    showToast('تعذر التقاط موقع المعمل الثاني، يرجى تفعيل الـ GPS', 'error');
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+            );
+        };
+
+        window.generateNewPin = function() {
+            if (!activeSessionData || !activeSessionData.isActive) return;
+            const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+            activeSessionData.pinCode = newPin;
+            
+            localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
+            publishSessionToCloud(activeSessionData);
+
+            updateAdminPanel();
+            showToast(`تم تغيير رمز التسجيل إلى: ${newPin}`, 'info');
+        };
+
+        window.closeSession = function() {
+            activeSessionData = { isActive: false };
+            localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
+            publishSessionToCloud(activeSessionData);
+
+            updateStudentBanner();
+            updateAdminPanel();
+            showToast('تم إغلاق فترة تسجيل الحضور', 'info');
+        };
+
+        window.handleStudentSubmit = function(e) {
             e.preventDefault();
 
             if (!activeSessionData || !activeSessionData.isActive) {
@@ -491,14 +529,12 @@
                 return;
             }
 
-            // Single device check
             const submissionKey = `submitted_${course}_sec${sectionNum}`;
             if (localStorage.getItem(submissionKey)) {
                 showToast('تم التسجيل بالفعل من هذا الهاتف! يُمنع التسجيل لزملاء آخرين من نفس الجهاز.', 'error');
                 return;
             }
 
-            // Distance Check
             let distanceText = 'موثق بالرمز';
             if (activeSessionData.requireGps && activeSessionData.lat1) {
                 if (!studentCoords) {
@@ -519,7 +555,6 @@
                 distanceText = Math.round(minDistance) + 'm (GPS)';
             }
 
-            // Duplicate ID check
             const isAlreadyRegistered = allAttendanceRecords.some(r => 
                 r.studentId === studentId && r.course === course && r.sectionNum === sectionNum
             );
@@ -528,7 +563,6 @@
                 return;
             }
 
-            // Save Record locally and push to Cloud
             const newRecord = {
                 name: name,
                 studentId: studentId,
@@ -536,7 +570,6 @@
                 sectionNum: sectionNum,
                 timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
                 date: new Date().toLocaleDateString('ar-EG'),
-                deviceId: deviceId,
                 distanceFromLab: distanceText
             };
 
@@ -544,52 +577,16 @@
             localStorage.setItem(RECORDS_KEY, JSON.stringify(allAttendanceRecords));
             localStorage.setItem(submissionKey, 'true');
 
-            // Send Record to Cloud Database
-            if (window.db) {
-                try {
-                    const attendanceCollRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'attendance');
-                    await window.addDoc(attendanceCollRef, newRecord);
-                } catch (err) {
-                    console.warn('Record saved locally only:', err);
-                }
-            }
-
-            channel.postMessage({ type: 'RECORD_UPDATE', records: allAttendanceRecords });
+            publishRecordToCloud(newRecord);
 
             renderAttendanceTable();
-            showToast('تم تسجيل حضورك بنجاح وسحب البيانات للسحابة!', 'success');
+            showToast('تم تسجيل حضورك بنجاح وسحب البيانات المعنية للشيت!', 'success');
             document.getElementById('attendanceForm').reset();
             studentCoords = null;
             document.getElementById('locationStatusBadge').innerText = "لم يتم التحقق";
             document.getElementById('locationStatusBadge').className = "text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full";
         };
 
-        window.closeSession = async function() {
-            activeSessionData = { isActive: false };
-            localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-            channel.postMessage({ type: 'SESSION_UPDATE', session: activeSessionData });
-
-            if (window.db) {
-                try {
-                    const sessionDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'session', 'current');
-                    await window.setDoc(sessionDocRef, activeSessionData);
-                } catch (e) {
-                    console.warn('Closed locally:', e);
-                }
-            }
-
-            updateStudentBanner();
-            updateAdminPanel();
-            showToast('تم إغلاق فترة تسجيل الحضور عبر السحابة', 'info');
-        };
-
-        window.onload = function() {
-            updateStudentBanner();
-            updateAdminPanel();
-            renderAttendanceTable();
-        };
-
-        // View Switcher & Password Check
         window.switchView = function(view) {
             const studentSec = document.getElementById('studentSection');
             const adminSec = document.getElementById('adminSection');
@@ -653,7 +650,6 @@
             }
         };
 
-        // Distance Calculator (Haversine Formula)
         function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
             if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
             const R = 6371e3;
@@ -670,7 +666,6 @@
             return R * c;
         }
 
-        // Student Location Capture with High Accuracy
         window.verifyStudentLocation = function() {
             const badge = document.getElementById('locationStatusBadge');
             badge.innerText = "جاري الحساب بطاقة عالية...";
@@ -683,8 +678,6 @@
                 return;
             }
 
-            const geoOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     studentCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -693,45 +686,39 @@
                     showToast('تم تحديد موقعك بنجاح!', 'success');
                 },
                 (err) => {
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                            studentCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                            badge.innerText = "تم التقاط الموقع (تقريبي) ✓";
-                            badge.className = "text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full";
-                            showToast('تم تحديد موقعك التقريبي بنجاح!', 'success');
-                        },
-                        (err2) => {
-                            badge.innerText = "فشل التقاط الموقع";
-                            badge.className = "text-[11px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full";
-                            showToast('يرجى تفعيل الـ GPS وإعطاء الإذن للمتصفح', 'error');
-                        },
-                        { enableHighAccuracy: false, timeout: 8000 }
-                    );
+                    badge.innerText = "فشل التقاط الموقع";
+                    badge.className = "text-[11px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full";
+                    showToast('يرجى تفعيل الـ GPS وإعطاء الإذن للمتصفح', 'error');
                 },
-                geoOptions
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         };
 
-        // UI Handlers
         function updateStudentBanner() {
             const badge = document.getElementById('sessionBadge');
             const card = document.getElementById('sessionStatusCard');
             const locBlock = document.getElementById('locationCheckBlock');
+            const titleText = document.getElementById('sessionTitleText');
+            const dot = document.getElementById('sessionStatusDot');
 
             if (activeSessionData && activeSessionData.isActive) {
-                badge.innerText = `جلسة مفتوحة: ${activeSessionData.course} - سكشن ${activeSessionData.sectionNum}`;
+                titleText.innerText = `جلسة مفتوحة: ${activeSessionData.course} - سكشن ${activeSessionData.sectionNum}`;
+                badge.innerText = `سكشن ${activeSessionData.sectionNum}`;
                 badge.className = "bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-bold";
                 card.className = "glass-card rounded-2xl p-5 shadow-sm border-r-4 border-r-emerald-500 flex items-center justify-between";
-                
+                dot.className = "w-3 h-3 rounded-full bg-emerald-500 animate-ping";
+
                 if (activeSessionData.requireGps) {
                     locBlock.classList.remove('hidden');
                 } else {
                     locBlock.classList.add('hidden');
                 }
             } else {
-                badge.innerText = "لا توجد جلسة مفتوحة حالياً";
+                titleText.innerText = "لا توجد فترة تسجيل مفتوحة حالياً بواسطة المعيد";
+                badge.innerText = "غير متاح";
                 badge.className = "bg-rose-100 text-rose-800 text-xs px-2.5 py-1 rounded-full font-bold";
                 card.className = "glass-card rounded-2xl p-5 shadow-sm border-r-4 border-r-rose-500 flex items-center justify-between";
+                dot.className = "w-3 h-3 rounded-full bg-rose-500";
             }
         }
 
@@ -760,195 +747,6 @@
             }
         }
 
-        // Start Session Engine
-        window.startSession = function() {
-            const course = document.getElementById('adminCourse').value;
-            const sectionNum = document.getElementById('adminSectionNum').value;
-            const requireGps = document.getElementById('requireGpsToggle').checked;
-            const radius = parseInt(document.getElementById('adminGpsRadius').value) || 500;
-
-            const pin = Math.floor(1000 + Math.random() * 9000).toString();
-
-            const saveAndPublishSession = (lat = null, lng = null) => {
-                activeSessionData = {
-                    course: course,
-                    sectionNum: sectionNum,
-                    pinCode: pin,
-                    lat1: lat,
-                    lng1: lng,
-                    lat2: null,
-                    lng2: null,
-                    requireGps: requireGps,
-                    allowedRadius: radius,
-                    isActive: true,
-                    startTime: new Date().toISOString()
-                };
-
-                localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-                channel.postMessage({ type: 'SESSION_UPDATE', session: activeSessionData });
-
-                updateStudentBanner();
-                updateAdminPanel();
-                showToast(`تم فتح الجلسة بنجاح! الرمز المباشر للطلاب هو: ${pin}`, 'success');
-            };
-
-            if (requireGps && navigator.geolocation) {
-                showToast('جاري استخراج موقع المعمل وتفعيل الجلسة...', 'info');
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => saveAndPublishSession(pos.coords.latitude, pos.coords.longitude),
-                    (err) => {
-                        showToast('تعذر جلب موقع المعمل بدقة، تم فتح الجلسة وتأمينها بالرمز الفعّال!', 'info');
-                        saveAndPublishSession();
-                    },
-                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-                );
-            } else {
-                saveAndPublishSession();
-            }
-        };
-
-        // Add Second Lab Location Support
-        window.addSecondLabLocation = function() {
-            if (!activeSessionData || !activeSessionData.isActive) {
-                showToast('افتتح الجلسة أولاً قبل إضافة موقع المعمل الثاني', 'error');
-                return;
-            }
-
-            if (!navigator.geolocation) {
-                showToast('المتصفح لا يدعم تحديد الموقع', 'error');
-                return;
-            }
-
-            showToast('جاري التقاط موقع المعمل الثاني...', 'info');
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    activeSessionData.lat2 = pos.coords.latitude;
-                    activeSessionData.lng2 = pos.coords.longitude;
-
-                    localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-                    channel.postMessage({ type: 'SESSION_UPDATE', session: activeSessionData });
-
-                    updateAdminPanel();
-                    showToast('تم تسجيل وتفعيل موقع المعمل الثاني بنجاح!', 'success');
-                },
-                (err) => {
-                    showToast('تعذر التقاط موقع المعمل الثاني، يرجى تفعيل الـ GPS', 'error');
-                },
-                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-            );
-        };
-
-        window.generateNewPin = function() {
-            if (!activeSessionData) return;
-            const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-            activeSessionData.pinCode = newPin;
-            
-            localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-            channel.postMessage({ type: 'SESSION_UPDATE', session: activeSessionData });
-
-            updateAdminPanel();
-            showToast(`تم تغيير رمز التسجيل إلى: ${newPin}`, 'info');
-        };
-
-        window.closeSession = function() {
-            activeSessionData = { isActive: false };
-            localStorage.setItem(SESSION_KEY, JSON.stringify(activeSessionData));
-            channel.postMessage({ type: 'SESSION_UPDATE', session: activeSessionData });
-
-            updateStudentBanner();
-            updateAdminPanel();
-            showToast('تم إغلاق فترة تسجيل الحضور', 'info');
-        };
-
-        // Handle Student Submit
-        window.handleStudentSubmit = function(e) {
-            e.preventDefault();
-
-            if (!activeSessionData || !activeSessionData.isActive) {
-                showToast('لا توجد فترة تسجيل مفتوحة حالياً بواسطة المعيد!', 'error');
-                return;
-            }
-
-            const course = document.getElementById('studentCourse').value;
-            const sectionNum = document.getElementById('studentSectionNum').value;
-            const name = document.getElementById('studentName').value.trim();
-            const studentId = document.getElementById('studentId').value.trim();
-            const pin = document.getElementById('studentPin').value.trim();
-
-            if (course !== activeSessionData.course || sectionNum !== activeSessionData.sectionNum) {
-                showToast(`الجلسة المفتوحة حالياً هي لمادة (${activeSessionData.course} - سكشن ${activeSessionData.sectionNum})`, 'error');
-                return;
-            }
-
-            if (pin !== activeSessionData.pinCode) {
-                showToast('رمز السكشن غير صحيح! تأكد من الرمز الظاهر بالمعمل', 'error');
-                return;
-            }
-
-            // Single device check
-            const submissionKey = `submitted_${course}_sec${sectionNum}`;
-            if (localStorage.getItem(submissionKey)) {
-                showToast('تم التسجيل بالفعل من هذا الهاتف! يُمنع التسجيل لزملاء آخرين من نفس الجهاز.', 'error');
-                return;
-            }
-
-            // Geolocation Distance Check (Checking both Lab 1 and Lab 2)
-            let distanceText = 'موثق بالرمز';
-            if (activeSessionData.requireGps && activeSessionData.lat1) {
-                if (!studentCoords) {
-                    showToast('يرجى الضغط على زر "تأكيد موقعي الحالي بالمعمل" أولاً', 'error');
-                    return;
-                }
-
-                const distLab1 = calculateDistanceMeters(studentCoords.lat, studentCoords.lng, activeSessionData.lat1, activeSessionData.lng1);
-                const distLab2 = activeSessionData.lat2 ? calculateDistanceMeters(studentCoords.lat, studentCoords.lng, activeSessionData.lat2, activeSessionData.lng2) : Infinity;
-
-                const minDistance = Math.min(distLab1, distLab2);
-                const maxAllowed = activeSessionData.allowedRadius || 500;
-
-                if (minDistance > maxAllowed) {
-                    showToast(`أنت خارج نطاق المعمل! أقرب مسافة بينك وبين المعيد (${Math.round(minDistance)} متر - المسموح ${maxAllowed}m)`, 'error');
-                    return;
-                }
-                distanceText = Math.round(minDistance) + 'm (GPS)';
-            }
-
-            // Duplicate ID check
-            const isAlreadyRegistered = allAttendanceRecords.some(r => 
-                r.studentId === studentId && r.course === course && r.sectionNum === sectionNum
-            );
-            if (isAlreadyRegistered) {
-                showToast('هذا الرقم الجامعي (ID) تم تسجيل حضوره بالفعل!', 'error');
-                return;
-            }
-
-            // Save Record
-            const newRecord = {
-                name: name,
-                studentId: studentId,
-                course: course,
-                sectionNum: sectionNum,
-                timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-                date: new Date().toLocaleDateString('ar-EG'),
-                deviceId: deviceId,
-                distanceFromLab: distanceText
-            };
-
-            allAttendanceRecords.push(newRecord);
-            localStorage.setItem(RECORDS_KEY, JSON.stringify(allAttendanceRecords));
-            localStorage.setItem(submissionKey, 'true');
-
-            channel.postMessage({ type: 'RECORD_UPDATE', records: allAttendanceRecords });
-
-            renderAttendanceTable();
-            showToast('تم تسجيل حضورك بنجاح! شكراً لك.', 'success');
-            document.getElementById('attendanceForm').reset();
-            studentCoords = null;
-            document.getElementById('locationStatusBadge').innerText = "لم يتم التحقق";
-            document.getElementById('locationStatusBadge').className = "text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full";
-        };
-
-        // Render Table Data
         function renderAttendanceTable() {
             const tbody = document.getElementById('attendanceTableBody');
             const recordBadge = document.getElementById('recordCountBadge');
@@ -993,7 +791,6 @@
         document.getElementById('adminCourse').addEventListener('change', renderAttendanceTable);
         document.getElementById('adminSectionNum').addEventListener('change', renderAttendanceTable);
 
-        // Export to CSV Sheet
         window.exportToCSV = function() {
             const selectedCourse = document.getElementById('adminCourse').value;
             const selectedSec = document.getElementById('adminSectionNum').value;
@@ -1021,7 +818,6 @@
             showToast('تم تصدير ملف الاكسل بنجاح!', 'success');
         };
 
-        // Toast Messages
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
